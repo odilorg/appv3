@@ -3,27 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class Guide extends Model
+class Language extends Model
 {
-   use SoftDeletes;
-     protected $fillable = ['name'];
+    protected $fillable = ['name', 'code'];
 
-     // standard many-to-many (still useful for queries)
-    public function languages(): BelongsToMany
+    public function guides(): BelongsToMany
     {
-        return $this->belongsToMany(Language::class, 'guide_language')
+        return $this->belongsToMany(Guide::class, 'guide_language')
             ->withPivot(['level'])
             ->withTimestamps();
     }
 
-    // HasMany to the pivot model – used by Repeater
     public function guideLanguages(): HasMany
     {
         return $this->hasMany(GuideLanguage::class);
     }
-
 }
