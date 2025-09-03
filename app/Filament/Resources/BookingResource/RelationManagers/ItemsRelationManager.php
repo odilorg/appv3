@@ -2,19 +2,20 @@
 
 namespace App\Filament\Resources\BookingResource\RelationManagers;
 
+use App\Models\Car;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Forms\Get;
 use Filament\Tables;
+use App\Models\Guide;
+use App\Models\Hotel;
+use App\Models\Driver;
+use App\Models\Vehicle;
+
+// Supplier models – adjust to your app if names differ
+use Filament\Forms\Get;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
-
-// Supplier models – adjust to your app if names differ
-use App\Models\Guide;
-use App\Models\Driver;
-use App\Models\Vehicle;
-use App\Models\Hotel;
 
 class ItemsRelationManager extends RelationManager
 {
@@ -184,32 +185,69 @@ class ItemsRelationManager extends RelationManager
                             ->addActionLabel('Add assignment')
                             ->reorderable(true)
                             ->schema([
-                                Forms\Components\Select::make('assignable_type')
-                                    ->label('Type')
-                                    ->native(false)
-                                    ->required()
-                                    ->options([
-                                        Guide::class   => 'Guide',
-                                        Driver::class  => 'Driver',
-                                        //Vehicle::class => 'Vehicle',
-                                       // Hotel::class   => 'Hotel',
-                                    ])
-                                    ->live(),
+                               Forms\Components\Select::make('assignable_type')
+        ->label('Type')
+        ->native(false)
+        ->required()
+        ->options([
+            Guide::class  => 'Guide',
+            Driver::class => 'Driver',
+            // Hotel::class  => 'Hotel',
+        ])
+        ->live(),
 
-                                Forms\Components\Select::make('assignable_id')
-                                    ->label('Supplier')
-                                    ->native(false)
-                                    ->required()
-                                    ->options(function (Get $get) {
-                                        return match ($get('assignable_type')) {
-                                            Guide::class   => Guide::query()->orderBy('name')->pluck('name', 'id'),
-                                            Driver::class  => Driver::query()->orderBy('name')->pluck('name', 'id'),
-                                            //Vehicle::class => Vehicle::query()->orderBy('name')->pluck('name', 'id'),
-                                           // Hotel::class   => Hotel::query()->orderBy('name')->pluck('name', 'id'),
-                                            default        => collect(),
-                                        };
-                                    })
-                                    ->searchable(),
+    Forms\Components\Select::make('assignable_id')
+        ->label('Supplier')
+        ->native(false)
+        ->required()
+        ->options(function (Get $get) {
+            return match ($get('assignable_type')) {
+                Guide::class  => Guide::query()->orderBy('name')->pluck('name', 'id'),
+                Driver::class => Driver::query()->orderBy('name')->pluck('name', 'id'),
+                default       => collect(),
+            };
+        })
+        ->searchable()
+        ->live()
+        ->afterStateUpdated(function (Forms\Set $set, Get $get) {
+            // if the type is Driver and the driver changed, clear car_id
+            if ($get('assignable_type') === Driver::class) {
+                $set('car_id', null);
+            }
+        }),
+
+    // Car (visible only when Type = Driver)
+    Forms\Components\Select::make('car_id')
+        ->label('Car')
+        ->native(false)
+        ->searchable()
+        ->visible(fn (Get $get) => $get('assignable_type') === Driver::class)
+        ->options(function (Get $get) {
+            if ($get('assignable_type') !== Driver::class) {
+                return collect();
+            }
+            $driverId = $get('assignable_id');
+            if (! $driverId) {
+                return collect();
+            }
+            return Car::query()
+                ->where('driver_id', $driverId)
+                ->orderBy('plate_number')
+                ->get()
+                ->mapWithKeys(fn (Car $c) => [
+                    $c->id => "{$c->plate_number} — {$c->make} {$c->model}",
+                ]);
+        })
+        ->helperText('Choose a car owned by the selected driver.')
+        ->rule(function (Get $get) {
+            // Server-side guard: when Driver is selected, car must belong to that driver
+            if ($get('assignable_type') !== Driver::class) {
+                return null; // no rule in other cases
+            }
+            $driverId = $get('assignable_id');
+            return \Illuminate\Validation\Rule::exists('cars', 'id')
+                ->where(fn ($q) => $q->where('driver_id', $driverId));
+        }),
 
                                 Forms\Components\TextInput::make('role')
                                     ->label('Role / Service')
