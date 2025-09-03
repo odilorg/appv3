@@ -25,7 +25,15 @@ class Booking extends Model
 {
     if ($this->tour && $this->start_date) {
         $days = max(1, (int) $this->tour->duration_days);
-        $this->end_date = (clone $this->start_date)->addDays($days - 1);
+        $this->end_date = $this->start_date->copy()->addDays($days - 1);
     }
 }
+protected static function booted(): void
+{
+    static::saving(function (Booking $booking) {
+        // Keep end_date in sync before save
+        $booking->refreshDatesFromTrip();
+    });
+}
+
 }

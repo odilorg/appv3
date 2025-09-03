@@ -2,16 +2,17 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\BookingResource\Pages;
-use App\Filament\Resources\BookingResource\RelationManagers;
-use App\Models\Booking;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use App\Models\Booking;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use App\Models\ItineraryItem;
+use Filament\Resources\Resource;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\BookingResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\BookingResource\RelationManagers;
 
 class BookingResource extends Resource
 {
@@ -109,7 +110,7 @@ class BookingResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+
         ];
     }
 
@@ -120,5 +121,32 @@ class BookingResource extends Resource
             'create' => Pages\CreateBooking::route('/create'),
             'edit' => Pages\EditBooking::route('/{record}/edit'),
         ];
+    }
+     protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        /** @var \App\Models\Tour $tour */
+        $tour = $this->getOwnerRecord();
+
+        $max = ItineraryItem::query()
+            ->where('tour_id', $tour->id)
+            ->max('sort_order');
+
+        $data['tour_id'] = $tour->id;
+        $data['sort_order'] = is_null($max) ? 0 : $max + 1;
+
+        // Days cannot have a parent
+        if (($data['type'] ?? null) === 'day') {
+            $data['parent_id'] = null;
+        }
+
+        return $data;
+    }
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        // Days cannot have a parent
+        if (($data['type'] ?? null) === 'day') {
+            $data['parent_id'] = null;
+        }
+        return $data;
     }
 }

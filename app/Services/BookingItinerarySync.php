@@ -3,51 +3,60 @@
 namespace App\Services;
 
 use App\Models\Booking;
-use App\Models\ItineraryItem;
+use Illuminate\Support\Facades\DB;
 
 class BookingItinerarySync
 {
     public static function fromTripTemplate(Booking $booking): void
     {
-        $trip = $booking->trip()->with(['itineraryItems' => function ($q) {
-            $q->orderBy('sort_order');
-        }])->first();
+        if (! $booking->start_date) return;
 
-        if (!$trip) return;
+        $tour = $booking->tour()
+            ->with(['itineraryItems' => fn($q) => $q->with('parent')->orderBy('sort_order')->orderBy('id')])
+            ->first();
 
-        // Optional: wipe existing snapshot if re-generating
-        $booking->items()->delete();
+        if (! $tour) return;
 
-        // Compute base date per item. For hierarchy, compute offsets by walking the tree.
-        $items = $trip->itineraryItems;
-        foreach ($items as $item) {
-            // Calculate day offset:
-            // If you use Days as top level: offset by (day_index)
-            // If flat: derive from sort_order or meta.day_index
-            $dayOffset = self::offsetFor($item); // implement your own logic
+        DB::transaction(function () use ($booking, $tour) {
+            // Optional: clean snapshot
+            $booking->items()->delete();
 
-            $booking->items()->create([
-                'trip_itinerary_item_id'   => $item->id,
-                'date'                     => $booking->start_date->copy()->addDays($dayOffset),
-                'type'                     => $item->type,
-                'sort_order'               => $item->sort_order,
-                'title'                    => $item->title,
-                'description'              => $item->description,
-                'planned_start_time'       => $item->default_start_time,
-                'planned_duration_minutes' => $item->duration_minutes,
-                'meta'                     => $item->meta,
-            ]);
-        }
+            // Precompute day offsets: index top-level 'day' items by their sort sequence
+            $dayOffsets = [];
+            $dayIndex = 0;
+            foreach ($tour->itineraryItems as $it) {
+                if ($it->type === 'day' && $it->parent_id === null) {
+                    $dayOffsets[$it->id] = $dayIndex++;
+                }
+            }
+
+            foreach ($tour->itineraryItems as $item) {
+                $dayOffset = self::offsetFor($item, $dayOffsets);
+
+                $booking->items()->create([
+                    'tour_itinerary_item_id'   => $item->id,
+                    'date'                     => $booking->start_date->copy()->addDays($dayOffset),
+                    'type'                     => $item->type,
+                    'sort_order'               => $item->sort_order,
+                    'title'                    => $item->title,
+                    'description'              => $item->description,
+                    'planned_start_time'       => $item->default_start_time,
+                    'planned_duration_minutes' => $item->duration_minutes,
+                    'meta'                     => $item->meta,
+                ]);
+            }
+        });
     }
 
-    protected static function offsetFor(ItineraryItem $item): int
+    protected static function offsetFor($item, array $dayOffsets): int
     {
-        // Simple approach:
-        // - if type == 'day' → use its sequence index (0-based) from top-level days
-        // - if type == 'stop' → same as its parent day offset
-        if ($item->type === 'day') {
-            return max(0, $item->sort_order);
+        if ($item->type === 'day' && $item->parent_id === null) {
+            return $dayOffsets[$item->id] ?? max(0, (int)$item->sort_order);
         }
-        return $item->parent ? max(0, $item->parent->sort_order) : 0;
+        if ($item->parent && $item->parent->type === 'day') {
+            return $dayOffsets[$item->parent->id] ?? 0;
+        }
+        // Fallback: flat layout → use sort_order as pseudo day
+        return max(0, (int)$item->sort_order);
     }
 }
