@@ -19,33 +19,37 @@ class EditBooking extends EditRecord
     {
         return [
             Actions\Action::make('regenerateFromTour')
-                ->label('Regenerate from Tour')
-                ->icon('heroicon-o-arrow-path')
-                ->requiresConfirmation()
-                ->visible(fn (Booking $record) => filled($record->tour_id) && filled($record->start_date))
-                ->action(function (Booking $record) {
-                    // Recompute dates, save quietly
-                    $record->refreshDatesFromTrip();
-                    $record->saveQuietly();
+            ->label('Regenerate from Tour')
+            ->icon('heroicon-o-arrow-path')
+            ->form([
+                \Filament\Forms\Components\Select::make('mode')
+                    ->label('Mode')
+                    ->native(false)
+                    ->options([
+                        'merge'   => 'Merge (keep custom & locked; update others)',
+                        'replace' => 'Replace (wipe non-custom, unlocked; then rebuild)',
+                    ])
+                    ->default('merge')
+                    ->required(),
+            ])
+            ->requiresConfirmation()
+            ->visible(fn ($record) => filled($record->tour_id) && filled($record->start_date))
+            ->action(function (array $data, $record) {
+                $record->refreshDatesFromTrip();
+                $record->saveQuietly();
 
-                    // Rebuild snapshot
-                    BookingItinerarySync::fromTripTemplate($record);
+                BookingItinerarySync::fromTripTemplate($record, $data['mode'] ?? 'merge');
 
-                    // Ensure Livewire has the latest model
-                    $record->refresh();
+                $record->refresh();
+                $this->fillForm();
+                $this->dispatch('refresh');
 
-                    // Refill the entire form from the fresh record
-                    $this->fillForm();
-
-                    // Ask children (like relation managers) to refresh
-                    $this->dispatch('refresh');
-
-                    Notification::make()
-                        ->title('Itinerary regenerated from tour template.')
-                        ->success()
-                        ->send();
-                }),
-            ...parent::getHeaderActions(),
-        ];
+                Notification::make()
+                    ->title('Itinerary synchronized ('.$data['mode'].').')
+                    ->success()
+                    ->send();
+            }),
+        ...parent::getHeaderActions(),
+    ];
     }
 }

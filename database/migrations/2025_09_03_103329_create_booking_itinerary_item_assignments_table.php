@@ -14,28 +14,28 @@ return new class extends Migration
         Schema::create('booking_itinerary_item_assignments', function (Blueprint $table) {
            $table->id();
 
-            $table->foreignId('booking_itinerary_item_id')
-                ->constrained()
-                ->cascadeOnDelete();
+    // FK (short name)
+    $table->unsignedBigInteger('booking_itinerary_item_id');
+    $table->foreign('booking_itinerary_item_id', 'bii_assign_bii_fk')
+        ->references('id')->on('booking_itinerary_items')
+        ->cascadeOnDelete();
 
-            // Polymorphic target: Guide, Driver, Vehicle, Hotel, etc.
-            $table->morphs('assignable'); // assignable_type, assignable_id
+    // Polymorphic columns (manual, to control index name)
+    $table->string('assignable_type');
+    $table->unsignedBigInteger('assignable_id');
+    $table->index(['assignable_type', 'assignable_id'], 'bii_assign_idx'); // short index name ✅
 
-            // Optional metadata
-            $table->string('role')->nullable();          // e.g. guide|driver|vehicle|hotel|other
-            $table->unsignedInteger('quantity')->nullable(); // seats/hours/units
-            $table->decimal('cost', 12, 2)->nullable();  // internal cost
-            $table->string('currency', 3)->default('USD');
-            $table->string('status')->nullable();        // planned|confirmed|completed|cancelled
-            $table->text('notes')->nullable();
+    // Optional fields
+    $table->string('role')->nullable();
+    $table->unsignedInteger('quantity')->nullable();
+    $table->decimal('cost', 12, 2)->nullable();
+    $table->string('currency', 3)->default('USD');
+    $table->string('status')->nullable();
+    $table->text('notes')->nullable();
+    $table->time('start_time')->nullable();
+    $table->time('end_time')->nullable();
 
-            // Optional time window for that assignment on the item date
-            $table->time('start_time')->nullable();
-            $table->time('end_time')->nullable();
-
-            $table->timestamps();
-
-            $table->index(['booking_itinerary_item_id', 'assignable_type', 'assignable_id'], 'bii_assignable_idx');
+    $table->timestamps();
         });
     }
 

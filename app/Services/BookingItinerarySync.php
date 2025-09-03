@@ -1,15 +1,15 @@
 <?php
-
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\BookingItineraryItem;
 use Illuminate\Support\Facades\DB;
 
 class BookingItinerarySync
 {
-    public static function fromTripTemplate(Booking $booking): void
+    public static function fromTripTemplate(Booking $booking, string $mode = 'merge'): void
     {
-        if (! $booking->start_date) return;
+        if (! $booking->start_date || ! $booking->tour_id) return;
 
         $tour = $booking->tour()
             ->with(['itineraryItems' => fn($q) => $q->with('parent')->orderBy('sort_order')->orderBy('id')])
@@ -17,11 +17,8 @@ class BookingItinerarySync
 
         if (! $tour) return;
 
-        DB::transaction(function () use ($booking, $tour) {
-            // Optional: clean snapshot
-            $booking->items()->delete();
-
-            // Precompute day offsets: index top-level 'day' items by their sort sequence
+        DB::transaction(function () use ($booking, $tour, $mode) {
+            // Precompute day offsets
             $dayOffsets = [];
             $dayIndex = 0;
             foreach ($tour->itineraryItems as $it) {
@@ -30,20 +27,65 @@ class BookingItinerarySync
                 }
             }
 
-            foreach ($tour->itineraryItems as $item) {
-                $dayOffset = self::offsetFor($item, $dayOffsets);
+            // Index existing booking items by source tour item id
+            $existing = $booking->items()->get()->keyBy('tour_itinerary_item_id');
 
-                $booking->items()->create([
-                    'tour_itinerary_item_id'   => $item->id,
-                    'date'                     => $booking->start_date->copy()->addDays($dayOffset),
-                    'type'                     => $item->type,
-                    'sort_order'               => $item->sort_order,
-                    'title'                    => $item->title,
-                    'description'              => $item->description,
-                    'planned_start_time'       => $item->default_start_time,
-                    'planned_duration_minutes' => $item->duration_minutes,
-                    'meta'                     => $item->meta,
-                ]);
+            // If "replace": remove all NON-custom & UNLOCKED items first
+            if ($mode === 'replace') {
+                $booking->items()
+                    ->where('is_custom', false)
+                    ->where('is_locked', false)
+                    ->delete(); // soft delete
+                $existing = $booking->items()->get()->keyBy('tour_itinerary_item_id'); // refresh
+            }
+
+            // Upsert from tour
+            foreach ($tour->itineraryItems as $src) {
+                $date = $booking->start_date->copy()->addDays(self::offsetFor($src, $dayOffsets));
+                /** @var BookingItineraryItem|null $row */
+                $row = $existing->get($src->id);
+
+                if ($row) {
+                    // Only update if NOT locked and NOT custom
+                    if (! $row->is_locked && ! $row->is_custom) {
+                        $row->fill([
+                            'date'                     => $date,
+                            'type'                     => $src->type,
+                            'sort_order'               => $src->sort_order,
+                            'title'                    => $src->title,
+                            'description'              => $src->description,
+                            'planned_start_time'       => $src->default_start_time,
+                            'planned_duration_minutes' => $src->duration_minutes,
+                            'meta'                     => $src->meta,
+                        ])->save();
+                    }
+                } else {
+                    // New source item → create booking item (non-custom)
+                    $booking->items()->create([
+                        'tour_itinerary_item_id'   => $src->id,
+                        'is_custom'                => false,
+                        'is_locked'                => false,
+                        'status'                   => 'planned',
+                        'date'                     => $date,
+                        'type'                     => $src->type,
+                        'sort_order'               => $src->sort_order,
+                        'title'                    => $src->title,
+                        'description'              => $src->description,
+                        'planned_start_time'       => $src->default_start_time,
+                        'planned_duration_minutes' => $src->duration_minutes,
+                        'meta'                     => $src->meta,
+                    ]);
+                }
+            }
+
+            // Remove non-custom, unlocked items whose source was removed (merge mode)
+            if ($mode === 'merge') {
+                $tourIds = $tour->itineraryItems->pluck('id')->all();
+                $booking->items()
+                    ->where('is_custom', false)
+                    ->where('is_locked', false)
+                    ->whereNotIn('tour_itinerary_item_id', $tourIds)
+                    ->delete();
             }
         });
     }
@@ -56,7 +98,6 @@ class BookingItinerarySync
         if ($item->parent && $item->parent->type === 'day') {
             return $dayOffsets[$item->parent->id] ?? 0;
         }
-        // Fallback: flat layout → use sort_order as pseudo day
         return max(0, (int)$item->sort_order);
     }
 }
