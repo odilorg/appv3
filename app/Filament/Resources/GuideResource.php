@@ -10,9 +10,13 @@ use Filament\Tables\Table;
 use Illuminate\Validation\Rule;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Repeater;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Forms\Components\TextInput;
+use Filament\Tables\Columns\ImageColumn;
+use Filament\Forms\Components\FileUpload;
 use Illuminate\Database\Eloquent\Builder;
 use App\Filament\Resources\GuideResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -28,11 +32,43 @@ class GuideResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
+                TextInput::make('name')
+                            ->label('ФИО Гида')
+                            ->required()
+                            ->maxLength(255),
+                        TextInput::make('phone')
+                            ->label('Телефон')
+                            ->required()
+                            ->maxLength(255),
+                        TextInput::make('email')
+                            ->required()
+                            ->maxLength(255),
+                        TextInput::make('address')
+                            ->label('Адрес')
+                            //->required()
+                            ->maxLength(255),
+                        TextInput::make('city')
+                            ->label('Город')
+                            //->required()
+                            ->maxLength(255),
                 Section::make('Languages & Levels')
                     ->schema([
+                       Repeater::make('price_types')
+                            ->label('Типы цен')
+                            ->schema([
+                                Select::make('price_type_name')
+                                ->options([
+                                    'pickup_dropoff' => 'Встреча/проводы',
+                                    'halfday' => 'Полдня',
+                                    'per_daily' => 'За день',
+                                ])
+                                ->required(),
+                                TextInput::make('price')
+                                ->required()
+                                ->numeric()
+                                ->prefix('$'),
+                                // ...
+                            ]),
                         Repeater::make('guideLanguages')
                             ->relationship() // binds to Guide::guideLanguages()
                             ->defaultItems(0)
@@ -70,6 +106,10 @@ class GuideResource extends Resource
                             ->reorderable(false) // ordering not needed
                             ->collapsible(),
                     ]),
+                    FileUpload::make('image')
+                            ->label('Фото')
+                            ->image(),
+                        
             ]);
     }
 
@@ -78,9 +118,8 @@ class GuideResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Guide')
-                    ->searchable()
-                    ->sortable(),
+                    ->label('ФИО Гида')
+                    ->searchable(),
 
                 // Show related Language names (comma-separated by default)
                 TextColumn::make('languages.name')
@@ -95,6 +134,37 @@ class GuideResource extends Resource
                     ->listWithLineBreaks()
                     ->wrap(),
 
+               
+               
+                TextColumn::make('phone')
+                    ->label('Телефон')
+                    ->searchable(),
+                TextColumn::make('email')
+                    ->icon('heroicon-m-envelope')
+                    ->iconColor('primary')
+                    ->copyable()
+                    ->copyMessage('Email address copied')
+                    ->copyMessageDuration(1500)
+                    ->searchable(),
+                    TextColumn::make('price_types')
+                        ->formatStateUsing(fn ($state) => is_array($state) ? implode(', ', $state) : $state)
+
+    ->listWithLineBreaks(),
+                TextColumn::make('address')
+                    ->label('Адрес')
+                    ->searchable()
+                    ->limit(25)
+                    ->wrap(),
+                TextColumn::make('city')
+                    ->label('Город')
+                    ->searchable(),
+                ImageColumn::make('image')
+                    ->label('Фото'),
+                //->thumbnail()
+                //->sortable()
+                //->searchable(),    
+                
+              
 
 
 

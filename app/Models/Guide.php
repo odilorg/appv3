@@ -10,7 +10,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Guide extends Model
 {
    use SoftDeletes;
-     protected $fillable = ['name'];
+     protected $fillable = [
+        'name',
+     'is_marketing',
+    'phone',
+    'email',
+    'address',
+    'city',
+    'image',
+    'price_types',
+    ];
+
+    protected $casts = [
+        'price_types' => 'array', // Cast price_types as an array
+    ];
 
      // standard many-to-many (still useful for queries)
     public function languages(): BelongsToMany
