@@ -4,14 +4,31 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Driver extends Model
 {
     use SoftDeletes;
-    protected $fillable = ['name','base_city','phone','email','is_active','notes'];
-    protected $casts = ['is_active' => 'boolean'];
+    protected $fillable = [
+        'name',
+        'email',
+        'is_active',
+        'notes',
+        'address',
+        'phone01',
+        'phone02',
+        'image',
+        'license_number',
+        'license_expires_at',
+        'license_image',
+    ];
+    protected $casts = [
+        'license_expires_at' => 'date',
+        'is_active' => 'boolean',
+    ];
 
-    public function vehicles() {
-        return $this->hasMany(Vehicle::class, 'owner_driver_id');
+    public function cars(): HasMany
+    {
+        return $this->hasMany(Car::class);
     }
 }

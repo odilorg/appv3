@@ -2,16 +2,17 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\DriverResource\Pages;
-use App\Filament\Resources\DriverResource\RelationManagers;
-use App\Models\Driver;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use App\Models\Driver;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\DriverResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\DriverResource\RelationManagers;
+use App\Filament\Resources\DriverResource\RelationManagers\CarsRelationManager;
 
 class DriverResource extends Resource
 {
@@ -23,24 +24,29 @@ class DriverResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('base_city')
-                    ->maxLength(255)
-                    ->default(null),
-                Forms\Components\TextInput::make('phone')
-                    ->tel()
-                    ->maxLength(255)
-                    ->default(null),
-                Forms\Components\TextInput::make('email')
-                    ->email()
-                    ->maxLength(255)
-                    ->default(null),
-                Forms\Components\Toggle::make('is_active')
-                    ->required(),
-                Forms\Components\Textarea::make('notes')
-                    ->columnSpanFull(),
+                   Forms\Components\Section::make('Driver')
+                ->schema([
+                    Forms\Components\TextInput::make('name')->required()->maxLength(120),
+                    Forms\Components\TextInput::make('phone01')->tel()->maxLength(50),
+                    Forms\Components\TextInput::make('phone02')->tel()->maxLength(50),
+                    Forms\Components\TextInput::make('email')
+                            ->label('Email address')
+                            ->email()
+                            ->required()
+                            ->maxLength(255),
+                              Forms\Components\TextInput::make('address')
+                            ->label('Address')
+                            ->required()
+                            ->maxLength(255),
+                    Forms\Components\TextInput::make('license_number')->maxLength(80)->unique(ignoreRecord: true),
+                    Forms\Components\DatePicker::make('license_expires_at'),
+                    Forms\Components\FileUpload::make('image')
+                            ->image(),
+                            Forms\Components\FileUpload::make('license_image')
+                            ->image(),
+                    Forms\Components\Toggle::make('is_active')->default(true),
+                    Forms\Components\Textarea::make('notes')->columnSpanFull(),
+                ])->columns(2),
             ]);
     }
 
@@ -48,20 +54,17 @@ class DriverResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('base_city')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('phone')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('email')
-                    ->searchable(),
-                Tables\Columns\IconColumn::make('is_active')
-                    ->boolean(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('phone01')->toggleable(),
+                Tables\Columns\TextColumn::make('phone02')->toggleable(),
+                Tables\Columns\TextColumn::make('license_number')->toggleable(),
+                Tables\Columns\TextColumn::make('license_expires_at')->date()->sortable(),
+                Tables\Columns\IconColumn::make('is_active')->boolean(),
+                Tables\Columns\TextColumn::make('cars_count')
+                    ->counts('cars')
+                    ->label('Cars')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('created_at')->dateTime()->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
@@ -87,7 +90,7 @@ class DriverResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            CarsRelationManager::class
         ];
     }
 
