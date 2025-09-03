@@ -30,4 +30,9 @@ class Car extends Model
     {
         return $this->belongsTo(Driver::class);
     }
+
+    public function company()
+{
+    return $this->belongsTo(\App\Models\Company::class);
+}
 }

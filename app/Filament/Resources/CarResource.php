@@ -55,6 +55,12 @@ class CarResource extends Resource
                 Forms\Components\FileUpload::make('image')
                     ->image()
                     ->required(),
+                     Forms\Components\Select::make('company_id')
+    ->label('Company')
+    ->relationship('company', 'name')
+    ->searchable()
+    ->preload()
+    ->nullable(),
             ])->columns(2);
     }
 
