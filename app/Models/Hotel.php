@@ -1,10 +1,12 @@
 <?php
 
 namespace App\Models;
+use App\Models\Room;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Hotel extends Model
 {
@@ -24,20 +26,24 @@ class Hotel extends Model
 
     protected $casts = [
         'images' => 'array',
+        'category' => 'integer',
     ];
 
-     public function rooms(): HasMany
+     public function rooms(): HasMany { return $this->hasMany(Room::class); }
+
+    public function amenities(): BelongsToMany
     {
-        return $this->hasMany(Room::class);
+        return $this->belongsToMany(Amenity::class, 'amenity_hotel')
+            ->where('scope','hotel');
     }
      public function city(): BelongsTo
     {
         return $this->belongsTo(City::class);
     }
-    public function hotelRooms()
-    {
-        return $this->hasMany(Room::class);
-    }
+    // public function hotelRooms()
+    // {
+    //     return $this->hasMany(Room::class);
+    // }
 
     public function company(): BelongsTo
 {
