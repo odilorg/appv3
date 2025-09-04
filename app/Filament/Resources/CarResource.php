@@ -26,6 +26,9 @@ class CarResource extends Resource
                 Forms\Components\Select::make('driver_id')
                     ->relationship('driver', 'name')
                     ->required(),
+                 Forms\Components\Select::make('transport_type_id')
+                    ->relationship('transportType', 'code')
+                    ->required(),    
                 Forms\Components\TextInput::make('make')
                     ->required()
                     ->maxLength(255),
