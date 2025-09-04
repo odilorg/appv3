@@ -4,6 +4,7 @@ namespace App\Filament\Resources\BookingResource\RelationManagers;
 
 use App\Models\Car;
 use Filament\Forms;
+use App\Models\Room;
 use Filament\Tables;
 use App\Models\Guide;
 use App\Models\Hotel;
@@ -13,7 +14,10 @@ use App\Models\Vehicle;
 // Supplier models – adjust to your app if names differ
 use Filament\Forms\Get;
 use Filament\Forms\Form;
+use App\Models\Restaurant;
 use Filament\Tables\Table;
+use App\Models\RestaurantMeal;
+use Illuminate\Validation\Rule;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 
@@ -54,10 +58,10 @@ class ItemsRelationManager extends RelationManager
                 ->numeric()
                 ->minValue(0),
 
-            Forms\Components\TextInput::make('sort_order')
-                ->numeric()
-                ->minValue(0)
-                ->helperText('Tip: you can drag & drop rows to reorder.'),
+            // Forms\Components\TextInput::make('sort_order')
+            //     ->numeric()
+            //     ->minValue(0)
+            //     ->helperText('Tip: you can drag & drop rows to reorder.'),
 
             Forms\Components\Select::make('status')
                 ->label('Status')
@@ -79,16 +83,16 @@ class ItemsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
-            ->reorderable('sort_order')     // drag & drop
-            ->defaultSort('sort_order')
+            // ->reorderable('sort_order')     // drag & drop
+            // ->defaultSort('sort_order')
             ->columns([
-                Tables\Columns\TextColumn::make('sort_order')
-                    ->label('#')
-                    ->sortable(),
+                // Tables\Columns\TextColumn::make('sort_order')
+                //     ->label('#')
+                //     ->sortable(),
 
                 Tables\Columns\TextColumn::make('date')
-                    ->date()
-                    ->sortable(),
+                    ->date(),
+                   // ->sortable(),
 
                 // Tables\Columns\BadgeColumn::make('type')
                 //     ->label('Type')
@@ -122,8 +126,8 @@ class ItemsRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('assignments_count')
                     ->counts('assignments')
-                    ->label('Suppliers')
-                    ->sortable(),
+                    ->label('Suppliers'),
+                   // ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -185,87 +189,148 @@ class ItemsRelationManager extends RelationManager
                             ->addActionLabel('Add assignment')
                             ->reorderable(true)
                             ->schema([
-                               Forms\Components\Select::make('assignable_type')
-        ->label('Type')
-        ->native(false)
-        ->required()
-        ->options([
-            Guide::class  => 'Guide',
-            Driver::class => 'Driver',
-            // Hotel::class  => 'Hotel',
-        ])
-        ->live(),
+                                Forms\Components\Select::make('assignable_type')
+                                    ->label('Type')
+                                    ->native(false)
+                                    ->required()
+                                    ->options([
+                                        Guide::class  => 'Guide',
+                                        Driver::class => 'Driver',
+                                        Hotel::class  => 'Hotel',
+                                        Restaurant::class  => 'Restaurant',
+                                    ])
+                                    ->live(),
 
-    Forms\Components\Select::make('assignable_id')
-        ->label('Supplier')
-        ->native(false)
-        ->required()
-        ->options(function (Get $get) {
-            return match ($get('assignable_type')) {
-                Guide::class  => Guide::query()->orderBy('name')->pluck('name', 'id'),
-                Driver::class => Driver::query()->orderBy('name')->pluck('name', 'id'),
-                default       => collect(),
-            };
-        })
-        ->searchable()
-        ->live()
-        ->afterStateUpdated(function (Forms\Set $set, Get $get) {
-            // if the type is Driver and the driver changed, clear car_id
-            if ($get('assignable_type') === Driver::class) {
-                $set('car_id', null);
+                                Forms\Components\Select::make('assignable_id')
+                                    ->label('Supplier')
+                                    ->native(false)
+                                    ->required()
+                                    ->options(function (Get $get) {
+                                        return match ($get('assignable_type')) {
+                                            Guide::class  => Guide::query()->orderBy('name')->pluck('name', 'id'),
+                                            Driver::class => Driver::query()->orderBy('name')->pluck('name', 'id'),
+                                            Hotel::class  => Hotel::query()->orderBy('name')->pluck('name', 'id'),
+                                            Restaurant::class  => Restaurant::query()->orderBy('name')->pluck('name', 'id'),
+                                            default       => collect(),
+                                        };
+                                    })
+                                    ->searchable()
+                                    ->live()
+                                    ->afterStateUpdated(function (Forms\Set $set, Get $get) {
+                                        // if the type is Driver and the driver changed, clear car_id
+                                        if ($get('assignable_type') === Driver::class) {
+                                            $set('car_id', null);
+                                        }
+                                    }),
+
+                                // Car (visible only when Type = Driver)
+                                Forms\Components\Select::make('car_id')
+                                    ->label('Car')
+                                    ->native(false)
+                                    ->searchable()
+                                    ->visible(fn(Get $get) => $get('assignable_type') === Driver::class)
+                                    ->options(function (Get $get) {
+                                        if ($get('assignable_type') !== Driver::class) {
+                                            return collect();
+                                        }
+                                        $driverId = $get('assignable_id');
+                                        if (! $driverId) {
+                                            return collect();
+                                        }
+                                        return Car::query()
+                                            ->where('driver_id', $driverId)
+                                            ->orderBy('plate_number')
+                                            ->get()
+                                            ->mapWithKeys(fn(Car $c) => [
+                                                $c->id => "{$c->plate_number} — {$c->make} {$c->model}",
+                                            ]);
+                                    })
+                                    ->helperText('Choose a car owned by the selected driver.')
+                                    ->rule(function (Get $get) {
+                                        // Server-side guard: when Driver is selected, car must belong to that driver
+                                        if ($get('assignable_type') !== Driver::class) {
+                                            return null; // no rule in other cases
+                                        }
+                                        $driverId = $get('assignable_id');
+                                        return \Illuminate\Validation\Rule::exists('cars', 'id')
+                                            ->where(fn($q) => $q->where('driver_id', $driverId));
+                                    }),
+                                    // ROOM (visible only when Type = Hotel)
+Forms\Components\Select::make('room_id')
+    ->label('Room type')
+    ->native(false)
+    ->searchable()
+    ->visible(fn (Get $get) => $get('assignable_type') === Hotel::class)
+    ->options(function (Get $get) {
+        if ($get('assignable_type') !== Hotel::class) return collect();
+        $hotelId = $get('assignable_id');
+        if (! $hotelId) return collect();
+
+        return Room::query()
+            ->where('hotel_id', $hotelId)
+            ->orderBy('name')
+            ->pluck('name', 'id');
+    })
+    ->rule(function (Get $get) {
+        if ($get('assignable_type') !== Hotel::class) return null;
+        $hotelId = $get('assignable_id');
+        return Rule::exists('rooms', 'id')->where(fn ($q) => $q->where('hotel_id', $hotelId));
+    }),
+
+// MEAL (visible only when Type = Restaurant)
+Forms\Components\Select::make('restaurant_meal_id')
+    ->label('Meal')
+    ->native(false)
+    ->searchable()
+    ->visible(fn (Get $get) => $get('assignable_type') === Restaurant::class)
+    ->options(function (Get $get) {
+        if ($get('assignable_type') !== Restaurant::class) return collect();
+        $restaurantId = $get('assignable_id');
+        if (! $restaurantId) return collect();
+
+        return RestaurantMeal::query()
+            ->where('restaurant_id', $restaurantId)
+            ->where('is_active', true)
+            //->orderBy('sort_order')->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (RestaurantMeal $m) => [
+                $m->id => $m->name . ' — ' . number_format((float) $m->price, 2) . ' ' . $m->currency . ($m->per_person ? ' /pp' : ''),
+            ]);
+    })
+    ->live()
+    ->afterStateUpdated(function (Forms\Set $set, Get $get, $state) {
+        // Optional: auto-fill cost/currency/role/qty from selected meal
+        if (! $state) return;
+        $meal = RestaurantMeal::find($state);
+        if ($meal) {
+            $set('cost', $meal->price);
+            $set('currency', $meal->currency);
+            if (($meal->type ?? null) && ! $get('role')) {
+                $set('role', ucfirst($meal->type));
             }
-        }),
-
-    // Car (visible only when Type = Driver)
-    Forms\Components\Select::make('car_id')
-        ->label('Car')
-        ->native(false)
-        ->searchable()
-        ->visible(fn (Get $get) => $get('assignable_type') === Driver::class)
-        ->options(function (Get $get) {
-            if ($get('assignable_type') !== Driver::class) {
-                return collect();
+            if ($meal->per_person && ! $get('quantity')) {
+                $set('quantity', 1);
             }
-            $driverId = $get('assignable_id');
-            if (! $driverId) {
-                return collect();
-            }
-            return Car::query()
-                ->where('driver_id', $driverId)
-                ->orderBy('plate_number')
-                ->get()
-                ->mapWithKeys(fn (Car $c) => [
-                    $c->id => "{$c->plate_number} — {$c->make} {$c->model}",
-                ]);
-        })
-        ->helperText('Choose a car owned by the selected driver.')
-        ->rule(function (Get $get) {
-            // Server-side guard: when Driver is selected, car must belong to that driver
-            if ($get('assignable_type') !== Driver::class) {
-                return null; // no rule in other cases
-            }
-            $driverId = $get('assignable_id');
-            return \Illuminate\Validation\Rule::exists('cars', 'id')
-                ->where(fn ($q) => $q->where('driver_id', $driverId));
-        }),
+        }
+    }),
 
-                                Forms\Components\TextInput::make('role')
-                                    ->label('Role / Service')
-                                    ->placeholder('guide / driver / vehicle / hotel / other'),
+                                // Forms\Components\TextInput::make('role')
+                                //     ->label('Role / Service')
+                                //     ->placeholder('guide / driver / vehicle / hotel / other'),
 
-                                Forms\Components\TextInput::make('quantity')
-                                    ->label('Qty')
-                                    ->numeric()
-                                    ->minValue(0),
+                                // Forms\Components\TextInput::make('quantity')
+                                //     ->label('Qty')
+                                //     ->numeric()
+                                //     ->minValue(0),
 
-                                Forms\Components\TextInput::make('cost')
-                                    ->label('Cost')
-                                    ->numeric(),
+                                // Forms\Components\TextInput::make('cost')
+                                //     ->label('Cost')
+                                //     ->numeric(),
 
-                                Forms\Components\TextInput::make('currency')
-                                    ->label('Cur')
-                                    ->maxLength(3)
-                                    ->default('USD'),
+                                // Forms\Components\TextInput::make('currency')
+                                //     ->label('Cur')
+                                //     ->maxLength(3)
+                                //     ->default('USD'),
 
                                 Forms\Components\Select::make('status')
                                     ->label('Status')
@@ -296,7 +361,7 @@ class ItemsRelationManager extends RelationManager
                         $form->fill([
                             'assignments' => $record->assignments()
                                 ->get()
-                                ->map(fn ($a) => [
+                                ->map(fn($a) => [
                                     'assignable_type' => $a->assignable_type,
                                     'assignable_id'   => $a->assignable_id,
                                     'role'            => $a->role,
@@ -339,9 +404,9 @@ class ItemsRelationManager extends RelationManager
 
                 // Quick lock/unlock to protect from regen overwrites
                 Tables\Actions\Action::make('toggleLock')
-                    ->label(fn ($record) => $record->is_locked ? 'Unlock' : 'Lock')
+                    ->label(fn($record) => $record->is_locked ? 'Unlock' : 'Lock')
                     ->icon('heroicon-o-lock-closed')
-                    ->color(fn ($record) => $record->is_locked ? 'gray' : 'warning')
+                    ->color(fn($record) => $record->is_locked ? 'gray' : 'warning')
                     ->action(function ($record) {
                         $record->is_locked = ! $record->is_locked;
                         $record->save();
@@ -358,7 +423,7 @@ class ItemsRelationManager extends RelationManager
                 Tables\Actions\Action::make('cancelItem')
                     ->label('Cancel')
                     ->icon('heroicon-o-x-circle')
-                    ->visible(fn ($record) => $record->status !== 'cancelled')
+                    ->visible(fn($record) => $record->status !== 'cancelled')
                     ->requiresConfirmation()
                     ->action(function ($record) {
                         $record->status = 'cancelled';
@@ -380,24 +445,17 @@ class ItemsRelationManager extends RelationManager
      * Ensure newly created rows are CUSTOM and attached to this booking.
      */
     protected function mutateFormDataBeforeCreate(array $data): array
-    {
-        /** @var \App\Models\Booking $booking */
-        $booking = $this->getOwnerRecord();
+{
+    /** @var \App\Models\Booking $booking */
+    $booking = $this->getOwnerRecord();
 
-        $max = $booking->items()->max('sort_order');
+    $data['booking_id'] = $booking->id;
+    $data['is_custom'] = true;
+    $data['tour_itinerary_item_id'] = null;
+    $data['status'] = $data['status'] ?? 'planned';
 
-        $data['booking_id'] = $booking->id;
-        $data['sort_order'] = is_null($max) ? 0 : $max + 1;
-
-        // Custom item flags
-        $data['is_custom'] = true;
-        $data['tour_itinerary_item_id'] = null;
-
-        // Default status if not set
-        $data['status'] = $data['status'] ?? 'planned';
-
-        return $data;
-    }
+    return $data;
+}
 
     protected function mutateFormDataBeforeSave(array $data): array
     {

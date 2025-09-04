@@ -64,7 +64,7 @@ class ItineraryItemsRelationManager extends RelationManager
                                 ->where('tour_id', $tour->id)
                                 ->whereNull('parent_id')        // top-level
                                 ->where('type', 'day')
-                                ->orderBy('sort_order')
+                                //->orderBy('sort_order')
                                 ->pluck('title', 'id');
                         })
                         ->searchable(),

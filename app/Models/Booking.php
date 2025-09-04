@@ -19,7 +19,7 @@ class Booking extends Model
 
     public function tour()     { return $this->belongsTo(Tour::class); }
     public function customer() { return $this->belongsTo(Customer::class); }
-    public function items()    { return $this->hasMany(BookingItineraryItem::class)->orderBy('sort_order'); }
+    public function items()    { return $this->hasMany(BookingItineraryItem::class); }
 
     public function refreshDatesFromTrip(): void
 {

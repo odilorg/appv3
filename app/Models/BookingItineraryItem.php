@@ -10,7 +10,7 @@ class BookingItineraryItem extends Model
 
     protected $fillable = [
         'booking_id','tour_itinerary_item_id','is_custom','is_locked','status',
-        'date','type','sort_order','title','description',
+        'date','type','title','description',
         'planned_start_time','planned_duration_minutes','meta',
     ];
 
