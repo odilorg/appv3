@@ -22,4 +22,9 @@ class Company extends Model
     {
         return $this->hasMany(Car::class);
     }
+
+    public function customerProfiles()
+    {
+        return $this->hasMany(CompanyProfile::class);
+    }
 }
