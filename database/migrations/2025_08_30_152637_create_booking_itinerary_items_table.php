@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('booking_itinerary_items', function (Blueprint $t) {
     $t->id();
     $t->foreignId('booking_id')->constrained()->cascadeOnDelete();
-    $t->foreignId('tour_itinerary_item_id')->constrained('itinerary_items')->cascadeOnDelete();
+    $t->foreignId('tour_itinerary_item_id')->nullable()->constrained('itinerary_items')->cascadeOnDelete();
     $t->date('date'); // concrete calendar day
     $t->enum('type', ['day','stop']);
     $t->unsignedInteger('sort_order')->default(0);
